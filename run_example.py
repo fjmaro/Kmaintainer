@@ -1,7 +1,7 @@
 """running raw arranger by default - example"""
 from pathlib import Path
 
-from kmarotools.basics import logtools
+from kjmarotools.basics import logtools
 
 from kmaintainer import FileMaintainer
 
