@@ -84,8 +84,10 @@ class FileMaintainer:
             else:
                 output_list.append(file)
 
-        ctd = " (not renamed because the renamed file already exists)"
-        self.log.warning(f"{self.__res}Files duplicated = {duplicated}" + ctd)
+        if duplicated:
+            dup_msg = f"{self.__res}Files duplicated = {duplicated} "
+            dup_msg += "(not renamed because the renamed file already exists)"
+            self.log.warning(dup_msg)
         self.log.info(f"{self.__res}Files renamed = {renamed}")
         self.files_in_path = output_list
         return duplicated > 0
