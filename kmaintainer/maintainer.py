@@ -39,10 +39,11 @@ class FileMaintainer:
         self.year_bounds = year_bounds
         self.newest_only = newest_only
         self.log = logger
+        self.files_in_path: List[Path] = []
         self.__phs = "[MNT] <NewModulePhase> "
         self.__res = "[MNT] <NewResultsBlock> "
 
-    def get_files_tree(self) -> List[Path]:
+    def get_files_tree(self) -> None:
         """
         ----------------------------------------------------------------------
         Get all the files of the given path to be scanned and return the list
@@ -51,10 +52,9 @@ class FileMaintainer:
         self.log.info(f"{self.__phs}Scanning files in path...")
         folders2scan = filetools.get_folders_tree(self.base_path2scan,
                                                   self.fld_patterns)
-        files_in_path = filetools.get_files_tree(folders2scan)
-        return files_in_path
+        self.files_in_path = filetools.get_files_tree(folders2scan)
 
-    def rename_proprietary_files(self, file_list: List[Path]) -> List[Path]:
+    def rename_proprietary_files(self) -> bool:
         """
         ----------------------------------------------------------------------
         Rename the files with proprietary-name in the given list
@@ -65,16 +65,16 @@ class FileMaintainer:
         duplicated = 0
         renamed = 0
 
-        for file in file_list:
+        for file in self.files_in_path:
             if proprietdin.is_proprietary_din(file, self.year_bounds):
                 new_name = proprietdin.rename_proprietary_din_file(
                     file, self.year_bounds)
                 if new_name == file:
                     duplicated += 1
                     kdin_name = proprietdin.kdin_from_proprietary_din(file)
-                    self.log.info("[MNT] [Duplicated] (%s): %s",
-                                  kdin_name.name,
-                                  file.relative_to(self.base_path2scan))
+                    self.log.warning("[MNT] [Duplicated]:  %s (%s)",
+                                     file.relative_to(self.base_path2scan),
+                                     kdin_name.name)
                 else:
                     renamed += 1
                     self.log.info("[MNT] [PropRenamed]: %s",
@@ -84,12 +84,13 @@ class FileMaintainer:
             else:
                 output_list.append(file)
 
-        dplmsg = " (not renamed because the renamed file already exists)"
-        self.log.info(f"{self.__res}Files duplicated = {duplicated}" + dplmsg)
+        ctd = " (not renamed because the renamed file already exists)"
+        self.log.warning(f"{self.__res}Files duplicated = {duplicated}" + ctd)
         self.log.info(f"{self.__res}Files renamed = {renamed}")
-        return output_list
+        self.files_in_path = output_list
+        return duplicated > 0
 
-    def update_kdin_filedates(self, files_in_path: List[Path]) -> None:
+    def update_kdin_filedates(self) -> None:
         """
         ----------------------------------------------------------------------
         Update the modify date of all the files matching the KDIN convention
@@ -98,7 +99,7 @@ class FileMaintainer:
         self.log.info(f"{self.__phs}Finding KDIN files to update...")
         updated = 0
 
-        for file in files_in_path:
+        for file in self.files_in_path:
             if conventions.is_file_kdin(file, self.year_bounds):
                 din = conventions.get_file_kdin(file, self.year_bounds)
                 mdt = ostools.get_file_modify_date(file)
@@ -112,12 +113,16 @@ class FileMaintainer:
                                   file.relative_to(self.base_path2scan))
         self.log.info(f"{self.__res}Files updated = {updated}")
 
-    def run(self, embedded=False, rename_propriet=True) -> None:
+    def run(self, embedded=False, rename_propriet=True) -> bool:
         """
         ----------------------------------------------------------------------
         Execute FileMaintainer with the defined configuration
         - embedded: It won't stop after the execution
         - rename_propriet: Rename proprietary files to KDIN before updating
+        ----------------------------------------------------------------------
+        return:
+            - True: Found propriet files not renamed (if rename_propriet=True)
+            - False: No warnings or errors found
         ----------------------------------------------------------------------
         """
         self.log.info("[MNT] <INIT> FileMaintainer initialized ...")
@@ -126,10 +131,19 @@ class FileMaintainer:
         self.log.info(f"[MNT] <CNFG> year_bounds = {self.year_bounds}")
         self.log.info("[MNT] <TAGS> [Duplicated] [PropRenamed] [DateUpdated]")
 
-        files_tree = self.get_files_tree()
+        self.get_files_tree()
+        duplicated_found = False
         if rename_propriet:
-            files_tree = self.rename_proprietary_files(files_tree)
-        self.update_kdin_filedates(files_tree)
+            duplicated_found = self.rename_proprietary_files()
+        self.update_kdin_filedates()
 
         if not embedded:
-            input("\nPROCESS FINALIZED\n\t\tPRESS ENTER TO RESUME")
+            if duplicated_found:
+                print("+------------------------+")
+                print("|        WARNING         |")
+                print("+------------------------+")
+                print("| Duplicated files found |")
+                print("| see log for more info. |")
+                print("+------------------------+")
+            input("\nPROCESS FINALIZED\n\n\t\tPRESS ENTER TO RESUME")
+        return duplicated_found
