@@ -62,20 +62,31 @@ class FileMaintainer:
         """
         self.log.info(f"{self.__phs}Finding proprietary files to rename...")
         output_list: List[Path] = []
+        duplicated = 0
         renamed = 0
 
         for file in file_list:
             if proprietdin.is_proprietary_din(file, self.year_bounds):
                 new_name = proprietdin.rename_proprietary_din_file(
                     file, self.year_bounds)
-                self.log.info("[MNT] [ProprRenamed] (%s): %s", new_name.name,
-                              file.relative_to(self.base_path2scan))
+                if new_name == file:
+                    duplicated += 1
+                    kdin_name = proprietdin.kdin_from_proprietary_din(file)
+                    self.log.info("[MNT] [Duplicated] (%s): %s",
+                                  kdin_name.name,
+                                  file.relative_to(self.base_path2scan))
+                else:
+                    renamed += 1
+                    self.log.info("[MNT] [PropRenamed]: %s",
+                                  new_name.relative_to(self.base_path2scan))
                 output_list.append(new_name)
-                renamed += 1
+
             else:
                 output_list.append(file)
 
-        self.log.info(f"{self.__res}Files renamed: {renamed}")
+        dplmsg = " (not renamed because the renamed file already exists)"
+        self.log.info(f"{self.__res}Files duplicated = {duplicated}" + dplmsg)
+        self.log.info(f"{self.__res}Files renamed = {renamed}")
         return output_list
 
     def update_kdin_filedates(self, files_in_path: List[Path]) -> None:
@@ -99,7 +110,7 @@ class FileMaintainer:
                     ostools.set_file_modify_date(file, din)
                     self.log.info("[MNT] [DateUpdated]: %s",
                                   file.relative_to(self.base_path2scan))
-        self.log.info(f"{self.__res}Files updated: {updated}")
+        self.log.info(f"{self.__res}Files updated = {updated}")
 
     def run(self, embedded=False, rename_propriet=True) -> None:
         """
@@ -113,7 +124,7 @@ class FileMaintainer:
         self.log.info(f"[MNT] <CNFG> base_path2scan = {self.base_path2scan}")
         self.log.info(f"[MNT] <CNFG> fld_patterns = {self.fld_patterns}")
         self.log.info(f"[MNT] <CNFG> year_bounds = {self.year_bounds}")
-        self.log.info("[MNT] <TAGS> [ProprRenamed] [DateUpdated]")
+        self.log.info("[MNT] <TAGS> [Duplicated] [PropRenamed] [DateUpdated]")
 
         files_tree = self.get_files_tree()
         if rename_propriet:
